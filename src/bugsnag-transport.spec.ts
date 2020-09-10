@@ -1,8 +1,10 @@
 const mockedClient = { notify: jest.fn() };
-const mockBugsnag = jest.fn().mockReturnValue(mockedClient);
+const mockBugsnag = {
+  start: jest.fn().mockReturnValue(mockedClient)
+}
 jest.mock('@bugsnag/js', () => mockBugsnag);
 
-import bugsnag from '@bugsnag/js';
+import Bugsnag from '@bugsnag/js';
 import winston from 'winston';
 import Transport from 'winston-transport';
 
@@ -24,7 +26,7 @@ describe('BugsnagTransport', () => {
       };
       new BugsnagTransport(opts);
 
-      expect(bugsnag).toHaveBeenCalledWith(opts.bugsnag);
+      expect(Bugsnag.start).toHaveBeenCalledWith(opts.bugsnag);
     });
   });
 

@@ -34,7 +34,7 @@
     "winston": "^3.2.1"
   },
   "dependencies": {
-    "@bugsnag/js": "^6.4.0",
+    "@bugsnag/js": "^7.3.3",
     "lodash": "^4.17.15",
     "winston-transport": "^4.3.0"
   }

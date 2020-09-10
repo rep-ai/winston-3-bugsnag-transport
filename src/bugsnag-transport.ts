@@ -1,8 +1,10 @@
-import bugsnag, { Bugsnag } from '@bugsnag/js';
+import Bugsnag from '@bugsnag/js';
+import { NodeConfig } from '@bugsnag/node';
+import { Client } from '@bugsnag/browser';
 import Transport from 'winston-transport';
 import _ from 'lodash';
 
-type BugsnagConfig = Exclude<Parameters<typeof bugsnag>[0], string>;
+type BugsnagConfig = NodeConfig;
 type TransportConfig = Transport.TransportStreamOptions;
 
 type WinstonLogLevel = 'silly' | 'debug' | 'verbose' | 'info' | 'warn' | 'error';
@@ -31,7 +33,7 @@ type LoggingInfo = {
  */
 export class BugsnagTransport extends Transport {
   public readonly level?: WinstonLogLevel;
-  private readonly client: Bugsnag.Client;
+  private readonly client: Client;
   private readonly logLevelToSeverity = new Map<WinstonLogLevel, BugsnagLogSeverity>([
     ['error', 'error'],
     ['warn', 'warning'],
@@ -49,7 +51,7 @@ export class BugsnagTransport extends Transport {
 
   constructor(opts: BugsnagTransportConfig) {
     super(opts);
-    this.client = bugsnag(opts.bugsnag);
+    this.client = Bugsnag.start(opts.bugsnag);
   }
 
   getBugsnagClient() {
@@ -67,27 +69,35 @@ export class BugsnagTransport extends Transport {
       return next();
     }
 
-    const notifyOptions: Bugsnag.INotifyOpts = {
-      severity: this.logLevelToSeverity.get(level),
+    const notifyOptions: any = {
+      severity: this.logLevelToSeverity.get(level) as BugsnagLogSeverity,
     };
-
-    // The logger has been used with an Error as a single param
-    if (_.isError(info)) {
-      if (info.message) {
-        notifyOptions.metaData = { message: info.message };
-      }
-
-      /* Instances of Error are the favorite food of Bugsnag client, give it "as is"
-      see: https://docs.bugsnag.com/platforms/javascript/reporting-handled-errors/#sending-errors */
-      this.client.notify(info, notifyOptions);
-      return next();
-    }
 
     /* Filter our properties we don't want in Bugsnag
     see: https://github.com/winstonjs/winston#streams-objectmode-and-info-objects */
     notifyOptions.metaData = _.omit(meta, 'message', SYM_LEVEL, SYM_SPLAT, SYM_MESSAGE);
 
-    this.client.notify(info.message, notifyOptions);
+    // The logger has been used with an Error as a single param
+    if (_.isError(info)) {
+      /* Instances of Error are the favorite food of Bugsnag client, give it "as is"
+      see: https://docs.bugsnag.com/platforms/javascript/reporting-handled-errors/#sending-errors */
+      this.client.notify(info, event => {
+        event.addMetadata('meta', notifyOptions.metaData);
+        if (info.message) {
+          event.addMetadata('error', 'message', info.message);
+        }
+        event.severity = notifyOptions.severity;
+      });
+      return next();
+    }
+
+    this.client.notify(Error(info.message), event => {
+      event.addMetadata('meta', notifyOptions.metaData);
+      if (info.message) {
+        event.addMetadata('error', 'message', info.message);
+      }
+      event.severity = notifyOptions.severity;
+    });
     return next();
   }
 
